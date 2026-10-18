@@ -1,0 +1,123 @@
+<?php
+require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/config/database.php';
+
+$id = filter_input(INPUT_GET, 'id', FILTER_VALIDATE_INT);
+if (!$id || $id < 1) {
+    set_flash('error', 'Please select a valid application to edit.');
+    redirect('index.php');
+}
+
+$find = $pdo->prepare('SELECT * FROM job_applications WHERE application_id = :id');
+$find->execute([':id' => $id]);
+$application = $find->fetch();
+if (!$application) {
+    set_flash('error', 'The application was not found.');
+    redirect('index.php');
+}
+
+$errors = [];
+$form = [
+    'first_name' => $application['first_name'],
+    'last_name' => $application['last_name'],
+    'email_address' => $application['email_address'],
+    'phone_number' => $application['phone_number'],
+    'home_address' => $application['home_address'],
+    'position_applied' => $application['position_applied'],
+    'technical_skills' => $application['technical_skills'],
+    'experience_years' => (string) $application['experience_years'],
+];
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    foreach ($form as $field => $value) {
+        $form[$field] = trim((string) ($_POST[$field] ?? ''));
+    }
+
+    if (!valid_csrf_token()) {
+        $errors[] = 'Your form session expired or the security token is invalid. Please refresh the page and try again.';
+    }
+    if ($form['first_name'] === '') $errors[] = 'First name is required.';
+    if ($form['last_name'] === '') $errors[] = 'Last name is required.';
+    if (!filter_var($form['email_address'], FILTER_VALIDATE_EMAIL)) $errors[] = 'Enter a valid email address.';
+    if ($form['phone_number'] === '') $errors[] = 'Phone number is required.';
+    if ($form['home_address'] === '') $errors[] = 'Home address is required.';
+    if ($form['position_applied'] === '') $errors[] = 'Position applied for is required.';
+    if ($form['technical_skills'] === '') $errors[] = 'Technical skills are required.';
+    if ($form['experience_years'] === '' || filter_var($form['experience_years'], FILTER_VALIDATE_INT) === false
+        || (int) $form['experience_years'] < 0 || (int) $form['experience_years'] > 99) {
+        $errors[] = 'Years of experience must be a whole number from 0 to 99.';
+    }
+
+    if (!$errors) {
+        $sql = 'UPDATE job_applications SET
+                    first_name = :first_name,
+                    last_name = :last_name,
+                    email_address = :email_address,
+                    phone_number = :phone_number,
+                    home_address = :home_address,
+                    position_applied = :position_applied,
+                    technical_skills = :technical_skills,
+                    experience_years = :experience_years
+                WHERE application_id = :application_id';
+        $update = $pdo->prepare($sql);
+        $update->execute([
+            ':first_name' => $form['first_name'],
+            ':last_name' => $form['last_name'],
+            ':email_address' => $form['email_address'],
+            ':phone_number' => $form['phone_number'],
+            ':home_address' => $form['home_address'],
+            ':position_applied' => $form['position_applied'],
+            ':technical_skills' => $form['technical_skills'],
+            ':experience_years' => (int) $form['experience_years'],
+            ':application_id' => $id,
+        ]);
+
+        set_flash('success', 'Application updated successfully.');
+        redirect('index.php');
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Application | Dream Job Application System</title>
+    <link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<header class="site-header">
+    <div class="container">
+        <p class="eyebrow">UPDATE</p>
+        <h1>Edit Job Application</h1>
+        <p class="subtitle">Update the applicant details, then save your changes.</p>
+    </div>
+</header>
+<main class="container page-content narrow-content">
+    <?php if ($errors): ?>
+        <div class="alert error" role="alert">
+            <strong>Please correct the following:</strong>
+            <ul><?php foreach ($errors as $error): ?><li><?= e($error) ?></li><?php endforeach; ?></ul>
+        </div>
+    <?php endif; ?>
+    <section class="panel">
+        <div class="section-heading"><div><h2>Application #<?= (int) $id ?></h2><p class="muted">Date added: <?= e(date('M d, Y h:i A', strtotime($application['date_added']))) ?></p></div></div>
+        <form method="post" action="edit.php?id=<?= (int) $id ?>" class="application-form">
+            <input type="hidden" name="csrf_token" value="<?= e(csrf_token()) ?>">
+            <div class="form-grid">
+                <div class="form-field"><label for="first_name">First name *</label><input id="first_name" name="first_name" maxlength="80" required value="<?= e($form['first_name']) ?>"></div>
+                <div class="form-field"><label for="last_name">Last name *</label><input id="last_name" name="last_name" maxlength="80" required value="<?= e($form['last_name']) ?>"></div>
+                <div class="form-field"><label for="email_address">Email address *</label><input id="email_address" name="email_address" type="email" maxlength="150" required value="<?= e($form['email_address']) ?>"></div>
+                <div class="form-field"><label for="phone_number">Phone number *</label><input id="phone_number" name="phone_number" type="tel" maxlength="30" required value="<?= e($form['phone_number']) ?>"></div>
+                <div class="form-field full-width"><label for="home_address">Home address *</label><input id="home_address" name="home_address" maxlength="255" required value="<?= e($form['home_address']) ?>"></div>
+                <div class="form-field"><label for="position_applied">Position applied for *</label><input id="position_applied" name="position_applied" maxlength="120" required value="<?= e($form['position_applied']) ?>"></div>
+                <div class="form-field"><label for="experience_years">Years of experience *</label><input id="experience_years" name="experience_years" type="number" min="0" max="99" step="1" required value="<?= e($form['experience_years']) ?>"></div>
+                <div class="form-field full-width"><label for="technical_skills">Technical skills *</label><textarea id="technical_skills" name="technical_skills" rows="4" required><?= e($form['technical_skills']) ?></textarea></div>
+            </div>
+            <div class="form-actions"><button class="button primary" type="submit">Save Changes</button><a class="button secondary" href="index.php">Cancel</a></div>
+        </form>
+    </section>
+</main>
+<footer class="site-footer"><div class="container">PHP PDO + MySQL • Data Analyst Programmer Job Application Project</div></footer>
+</body>
+</html>
