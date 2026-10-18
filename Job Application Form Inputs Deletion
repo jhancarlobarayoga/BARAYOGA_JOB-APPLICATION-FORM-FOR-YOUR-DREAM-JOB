@@ -1,0 +1,29 @@
+<?php
+require_once __DIR__ . '/includes/functions.php';
+require_once __DIR__ . '/config/database.php';
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    redirect('index.php');
+}
+
+if (!valid_csrf_token()) {
+    set_flash('error', 'The delete request could not be verified. Please try again.');
+    redirect('index.php');
+}
+
+$id = filter_input(INPUT_POST, 'application_id', FILTER_VALIDATE_INT);
+if (!$id || $id < 1) {
+    set_flash('error', 'Please select a valid application to delete.');
+    redirect('index.php');
+}
+
+$delete = $pdo->prepare('DELETE FROM job_applications WHERE application_id = :id');
+$delete->execute([':id' => $id]);
+
+if ($delete->rowCount() > 0) {
+    set_flash('success', 'Application deleted successfully.');
+} else {
+    set_flash('error', 'The application was not found or had already been deleted.');
+}
+
+redirect('index.php');
